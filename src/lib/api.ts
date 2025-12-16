@@ -10,7 +10,9 @@ const COINGECKO_IDS = [
     'velodrome-finance',
     'usd-coin',
     'tether',
-    'wrapped-bitcoin'
+    'wrapped-bitcoin',
+    'layer3',
+    'stargate-finance'
 ]
 
 // Simple mapping for demo
@@ -19,12 +21,16 @@ export const SYMBOL_MAP: Record<string, string> = {
     'WETH': 'ethereum',
     'OP': 'optimism',
     'VELO': 'velodrome-finance',
+    'VELO V2': 'velodrome-finance',
+    'VELO(V2)': 'velodrome-finance',
     'USDC': 'usd-coin',
     'USDT': 'tether',
     'ARB': 'arbitrum',
     'MATIC': 'matic-network',
     'POL': 'matic-network',
-    'WBTC': 'wrapped-bitcoin'
+    'WBTC': 'wrapped-bitcoin',
+    'L3': 'layer3',
+    'STG': 'stargate-finance'
 }
 
 export async function fetchTokenPrices() {
