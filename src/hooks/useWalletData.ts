@@ -6,8 +6,8 @@ import { formatEther } from 'viem'
 
 import { fetchBlockscoutTokens } from '@/lib/blockscout'
 import { createPublicClient, http, formatUnits, erc20Abi } from 'viem'
-import { soneium, base } from '@/config/chains'
-import { mainnet } from 'viem/chains'
+import { soneium } from '@/config/chains'
+import { mainnet, base } from 'viem/chains'
 
 // Explicit tokens to track on Soneium
 const SONEIUM_TOKENS = [
