@@ -29,17 +29,15 @@ export const SYMBOL_MAP: Record<string, string> = {
 
 export async function fetchTokenPrices() {
     try {
+        // Determine base URL dynamically or relative
+        // Since this runs on client (in hook), relative path works
         const ids = COINGECKO_IDS.join(',')
-        const response = await fetch(
-            `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`,
-            { next: { revalidate: 60 } }
-        )
+        const response = await fetch(`/api/prices?ids=${ids}`)
 
         if (!response.ok) throw new Error('Failed to fetch prices')
 
         const data = await response.json()
 
-        // Normalize return to handle both ID lookups and Symbol lookups logic downstream
         return data
     } catch (error) {
         console.error('Error fetching prices:', error)
