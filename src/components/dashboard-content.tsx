@@ -10,7 +10,7 @@ import { AssetTable } from '@/components/asset-table'
 import { AllocationChart } from '@/components/allocation-chart'
 import { cn } from '@/lib/utils'
 
-const DEFAULT_ADDRESS = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045'
+const DEFAULT_ADDRESS = '0x88ac3d64230c8a453492ff908a02daa27e9b3429'
 
 export function DashboardContent() {
     const [address, setAddress] = useState(DEFAULT_ADDRESS)
