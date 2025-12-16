@@ -1,7 +1,7 @@
 'use client'
 
 import { Card } from '@/components/ui/card'
-import { CHAIN_ICONS } from '@/config/chains'
+import { CHAIN_ICONS, getChainName } from '@/config/chains'
 
 interface AssetTableProps {
     balances: any[]
@@ -17,10 +17,10 @@ export function AssetTable({ balances, selectedChain }: AssetTableProps) {
     const sortedBalances = [...filteredBalances].sort((a, b) => b.value - a.value)
 
     return (
-        <Card className="overflow-hidden border-zinc-800 bg-zinc-900/60 backdrop-blur-sm">
+        <Card className="overflow-hidden border-border bg-card/60 backdrop-blur-sm">
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                    <thead className="bg-zinc-900/80 text-zinc-400 uppercase text-xs">
+                    <thead className="bg-muted/50 text-muted-foreground uppercase text-xs">
                         <tr>
                             <th className="px-6 py-4 font-medium tracking-wider">Asset</th>
                             <th className="px-6 py-4 font-medium tracking-wider text-right">Price</th>
@@ -29,12 +29,12 @@ export function AssetTable({ balances, selectedChain }: AssetTableProps) {
                             <th className="px-6 py-4 font-medium tracking-wider text-center">Chain</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-zinc-800/50">
+                    <tbody className="divide-y divide-border/50">
                         {sortedBalances.map((item) => (
-                            <tr key={`${item.chainId}-${item.contractAddress || item.symbol}`} className="hover:bg-zinc-800/30 transition-colors group">
+                            <tr key={`${item.chainId}-${item.contractAddress || item.symbol}`} className="hover:bg-muted/30 transition-colors group">
                                 <td className="px-6 py-4 whitespace-nowrap">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-white border border-zinc-700">
+                                        <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs font-bold text-foreground border border-border">
                                             {item.logo ? (
                                                 /* eslint-disable-next-line @next/next/no-img-element */
                                                 <img src={item.logo} alt={item.symbol} className="w-full h-full rounded-full object-cover" />
@@ -43,27 +43,30 @@ export function AssetTable({ balances, selectedChain }: AssetTableProps) {
                                             )}
                                         </div>
                                         <div>
-                                            <div className="font-bold text-white">{item.symbol}</div>
-                                            <div className="text-xs text-zinc-500">{item.isNative ? 'Native Token' : item.name}</div>
+                                            <div className="font-bold text-foreground">{item.symbol}</div>
+                                            <div className="text-xs text-muted-foreground">{item.isNative ? 'Native Token' : item.name}</div>
                                         </div>
                                     </div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-right text-zinc-300">
+                                <td className="px-6 py-4 whitespace-nowrap text-right text-muted-foreground">
                                     ${item.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-right text-zinc-300">
+                                <td className="px-6 py-4 whitespace-nowrap text-right text-muted-foreground">
                                     {parseFloat(item.formatted).toLocaleString(undefined, { maximumFractionDigits: 4 })}
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-right font-bold text-white">
+                                <td className="px-6 py-4 whitespace-nowrap text-right font-bold text-foreground">
                                     ${item.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
-                                    <div className="inline-flex items-center justify-center p-1.5 rounded-full bg-zinc-800/80 border border-zinc-700/50">
+                                    <div
+                                        className="inline-flex items-center justify-center p-1.5 rounded-full bg-secondary/80 border border-border relative group/tooltip"
+                                        title={getChainName(item.chainId)}
+                                    >
                                         {CHAIN_ICONS[item.chainId] ? (
                                             /* eslint-disable-next-line @next/next/no-img-element */
                                             <img src={CHAIN_ICONS[item.chainId]} alt="chain" className="w-4 h-4" />
                                         ) : (
-                                            <span className="text-[10px]">{item.chainId}</span>
+                                            <span className="text-[10px] text-muted-foreground">{item.chainId}</span>
                                         )}
                                     </div>
                                 </td>
@@ -71,7 +74,7 @@ export function AssetTable({ balances, selectedChain }: AssetTableProps) {
                         ))}
                         {sortedBalances.length === 0 && (
                             <tr>
-                                <td colSpan={5} className="px-6 py-12 text-center text-zinc-500">
+                                <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground">
                                     No assets found on checked chains.
                                 </td>
                             </tr>

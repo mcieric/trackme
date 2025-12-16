@@ -1,22 +1,22 @@
 import { defineChain } from 'viem'
 import { mainnet, optimism, base, arbitrum, polygon } from 'viem/chains'
 
-// Soneium Minato Testnet (Example configuration, adjust if Mainnet is available/needed)
+// Soneium Mainnet
 export const soneium = defineChain({
     id: 1868,
-    name: 'Soneium Minato',
+    name: 'Soneium',
     nativeCurrency: {
         decimals: 18,
         name: 'Ether',
         symbol: 'ETH',
     },
     rpcUrls: {
-        default: { http: ['https://rpc.minato.soneium.org/'] },
+        default: { http: ['https://rpc.soneium.org'] },
     },
     blockExplorers: {
-        default: { name: 'Explorer', url: 'https://explorer-testnet.soneium.org' },
+        default: { name: 'Explorer', url: 'https://soneium.blockscout.com' },
     },
-    testnet: true,
+    testnet: false,
 })
 
 export const SUPPORTED_CHAINS = [
@@ -36,5 +36,10 @@ export const CHAIN_ICONS: Record<number, string> = {
     [optimism.id]: '/icons/optimism.svg',
     [arbitrum.id]: '/icons/arbitrum.svg',
     [polygon.id]: '/icons/polygon.svg',
-    [soneium.id]: '/icons/soneium.svg',
+    [soneium.id]: '/icons/soneium.svg?v=2',
+}
+
+export function getChainName(chainId: number): string {
+    const chain = SUPPORTED_CHAINS.find(c => c.id === chainId)
+    return chain ? chain.name : `Chain ${chainId}`
 }

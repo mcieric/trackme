@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server'
 
 const EXPLORERS = {
     8453: 'https://base.blockscout.com/api',
-    10: 'https://explorer.optimism.io/api'
+    10: 'https://explorer.optimism.io/api',
+    1: 'https://eth.blockscout.com/api',
+    42161: 'https://arbitrum.blockscout.com/api',
+    137: 'https://polygon.blockscout.com/api',
+    1868: 'https://soneium.blockscout.com/api'
 }
 
 export async function GET(request: Request) {
