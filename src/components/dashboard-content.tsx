@@ -17,7 +17,26 @@ export function DashboardContent() {
     const [inputAddress, setInputAddress] = useState(DEFAULT_ADDRESS)
     const [selectedChain, setSelectedChain] = useState<number | null>(null)
 
-    const { balances, totalValue, isLoading, isError } = useWalletData(address)
+    const { balances, isLoading, isError } = useWalletData(address)
+
+    // Recalculate total value client-side to ensure consistency
+    const totalValue = balances.reduce((acc, curr) => acc + (curr.value || 0), 0)
+
+    // Aggregate balances by Chain for the Overview component
+    const chainBalancesMap = balances.reduce((acc, curr) => {
+        if (!acc[curr.chainId]) {
+            acc[curr.chainId] = {
+                chainId: curr.chainId,
+                value: 0,
+                symbol: curr.symbol, // Default symbol, might be mixed
+                // We don't really use symbol for chain card, but need shape match
+            }
+        }
+        acc[curr.chainId].value += curr.value
+        return acc
+    }, {} as Record<number, any>)
+
+    const chainBalances = Object.values(chainBalancesMap)
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault()
@@ -122,7 +141,7 @@ export function DashboardContent() {
                         </button>
                     </div>
                     <ChainOverview
-                        balances={balances}
+                        balances={chainBalances}
                         totalValue={totalValue}
                         selectedChain={selectedChain}
                         onSelectChain={setSelectedChain}
