@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { getNativeBalance, fetchTokenPrices } from '@/lib/api'
+import { getNativeBalance, fetchTokenPrices, SYMBOL_MAP } from '@/lib/api'
 import { fetchChainTokens } from '@/lib/alchemy'
 import { SUPPORTED_CHAINS } from '@/config/chains'
 import { formatEther } from 'viem'
@@ -14,7 +14,7 @@ export function useWalletData(address: string) {
             // 1. Fetch Native Balances (Existing logic)
             const nativePromises = SUPPORTED_CHAINS.map(async (chain) => {
                 try {
-                    const balance = await getNativeBalance(address, chain)
+                    const balance = await getNativeBalance(address, chain.id)
                     return {
                         chainId: chain.id,
                         balance,
@@ -48,26 +48,38 @@ export function useWalletData(address: string) {
 
             // Add Native
             for (const item of validNative) {
-                const value = parseFloat(formatEther(item.balance)) * (prices[item.symbol] || 0)
+                // Determine price ID: either direct map or fallback to symbol map (e.g. ETH)
+                const priceId = SYMBOL_MAP[item.symbol] || item.symbol.toLowerCase()
+                // CoinGecko structure is { "ethereum": { "usd": 3000 } } or flat { "ethereum": 3000 } depending on endpoint?
+                // Our api.ts calls simple/price?ids=...&vs_currencies=usd -> returns { "ethereum": { "usd": 3200 } }
+
+                const unitPrice = prices[priceId]?.usd || 0
+                const value = parseFloat(formatEther(item.balance)) * unitPrice
+
                 finalBalances.push({
                     ...item,
                     formatted: formatEther(item.balance),
-                    price: prices[item.symbol] || 0,
+                    price: unitPrice,
                     value,
                     name: 'Native Token',
                     logo: undefined
                 })
             }
 
-            // Add Tokens (Price set to 0 for now)
+            // Add Tokens (Price set via Map)
             for (const token of validTokens) {
+                const priceId = SYMBOL_MAP[token.symbol.toUpperCase()]
+                const unitPrice = priceId ? (prices[priceId]?.usd || 0) : 0
+
+                const value = parseFloat(token.formatted) * unitPrice
+
                 finalBalances.push({
                     chainId: token.chainId,
                     balance: BigInt(token.balance),
                     symbol: token.symbol,
                     formatted: token.formatted,
-                    price: 0,
-                    value: 0,
+                    price: unitPrice,
+                    value,
                     name: token.name,
                     logo: token.logo,
                     isNative: false
@@ -82,6 +94,7 @@ export function useWalletData(address: string) {
             }
         },
         enabled: !!address && address.startsWith('0x') && address.length === 42,
+        refetchInterval: 30000
     })
 
     return {
