@@ -12,7 +12,31 @@ const COINGECKO_IDS = [
     'tether',
     'wrapped-bitcoin',
     'layer3',
-    'stargate-finance'
+    'stargate-finance',
+    'aerodrome-finance',
+    'degen-base',
+    'based-brett',
+    'chainlink',
+    'uniswap',
+    'aave',
+    'curve-dao-token',
+    'maker',
+    'compound-governance-token',
+    'lido-dao',
+    'rocket-pool',
+    'frax',
+    'ethena-usde',
+    'gmx',
+    'magic',
+    'radiant-capital',
+    'seamless-protocol',
+    'moonwell',
+    'prime',
+    'pepe',
+    'shiba-inu',
+    'dogecoin',
+    'dogwifhat',
+    'bonk'
 ]
 
 // Simple mapping for demo
@@ -30,7 +54,33 @@ export const SYMBOL_MAP: Record<string, string> = {
     'POL': 'matic-network',
     'WBTC': 'wrapped-bitcoin',
     'L3': 'layer3',
-    'STG': 'stargate-finance'
+    'STG': 'stargate-finance',
+    'AERO': 'aerodrome-finance',
+    'DEGEN': 'degen-base',
+    'BRETT': 'based-brett',
+    'LINK': 'chainlink',
+    'UNI': 'uniswap',
+    'AAVE': 'aave',
+    'CRV': 'curve-dao-token',
+    'MKR': 'maker',
+    'COMP': 'compound-governance-token',
+    'LDO': 'lido-dao',
+    'RPL': 'rocket-pool',
+    'FRAX': 'frax',
+    'USDe': 'ethena-usde',
+    'GMX': 'gmx',
+    'MAGIC': 'magic',
+    'RDNT': 'radiant-capital',
+    'SEAM': 'seamless-protocol',
+    'WELL': 'moonwell',
+    'PRIME': 'prime',
+    'PEPE': 'pepe',
+    'SHIB': 'shiba-inu',
+    'DOGE': 'dogecoin',
+    'WIF': 'dogwifhat',
+    'BONK': 'bonk',
+    // Contract Addresses
+    '0x9560e827af36c94d2ac33a39bce1fe78631088db': 'velodrome-finance'
 }
 
 export async function fetchTokenPrices() {
@@ -55,9 +105,24 @@ export async function getNativeBalance(address: string, chainId: SupportedChainI
     const chain = SUPPORTED_CHAINS.find(c => c.id === chainId)
     if (!chain) throw new Error('Chain not supported')
 
+    const API_KEY = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY
+
+    // Use Alchemy RPC if available and chain is supported, otherwise default
+    const ALCHEMY_NETWORKS: Record<number, string> = {
+        1: 'eth-mainnet',
+        10: 'opt-mainnet',
+        8453: 'base-mainnet',
+        42161: 'arb-mainnet',
+        137: 'polygon-mainnet'
+    }
+
+    const transportUrl = (API_KEY && ALCHEMY_NETWORKS[chainId])
+        ? `https://${ALCHEMY_NETWORKS[chainId]}.g.alchemy.com/v2/${API_KEY}`
+        : undefined
+
     const client = createPublicClient({
         chain,
-        transport: http()
+        transport: http(transportUrl)
     })
 
     try {

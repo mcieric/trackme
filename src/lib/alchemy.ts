@@ -38,26 +38,53 @@ export async function fetchChainTokens(chainId: number, address: string): Promis
             return token.tokenBalance && token.tokenBalance !== '0x0000000000000000000000000000000000000000000000000000000000000000'
         })
 
-        if (nonZero.length === 0) return []
-
         const tokensData: TokenBalance[] = []
+        // Limit to top 500 to capture more assets (user has >300 tokens)
+        const topTokens = nonZero.slice(0, 500)
 
-        // Metadata fetching in batches or parallel
-        // Limit to top 20 to avoid rate limits/perf issues if wallet has 1000 shitcoins
-        const topTokens = nonZero.slice(0, 20)
+        // Force check specific tokens that might be missed (e.g. L3 on Optimism)
+        // We fetch these explicitly to ensure they are found even if Alchemy main call misses them
+        const PRIORITY_TOKENS: Record<number, string[]> = {
+            10: ['0x46777c76dbbe40fabb2aab99e33ce20058e76c59'] // L3 on Optimism
+        }
+
+        const priorityList = PRIORITY_TOKENS[chainId] || []
+
+        if (priorityList.length > 0) {
+            try {
+                // Fetch priority tokens separately
+                const priorityBalances = await alchemy.core.getTokenBalances(address, priorityList)
+
+                for (const pToken of priorityBalances.tokenBalances) {
+                    // Check if already in topTokens
+                    const exists = topTokens.find(t => t.contractAddress.toLowerCase() === pToken.contractAddress.toLowerCase())
+                    // If not present and has balance
+                    if (!exists && pToken.tokenBalance && pToken.tokenBalance !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
+                        topTokens.push(pToken)
+                    }
+                }
+            } catch (err) {
+                console.warn(`Failed to fetch priority tokens for chain ${chainId}`, err)
+            }
+        }
 
         await Promise.all(topTokens.map(async (token) => {
             try {
-                const metadata = await alchemy.core.getTokenMetadata(token.contractAddress)
+                let metadata = await alchemy.core.getTokenMetadata(token.contractAddress)
+
+                // Fallback for known broken metadata (e.g. L3 on Optimism)
+                if (token.contractAddress.toLowerCase() === '0x46777c76dbbe40fabb2aab99e33ce20058e76c59') {
+                    if (!metadata.decimals) metadata.decimals = 18
+                    if (!metadata.symbol) metadata.symbol = 'L3'
+                    if (!metadata.name) metadata.name = 'Layer3'
+                }
 
                 // Calculate formatted balance
                 let formatted = '0'
                 if (token.tokenBalance && metadata.decimals) {
                     const balanceBigInt = BigInt(token.tokenBalance)
                     const divisor = BigInt(10 ** metadata.decimals)
-                    // Simple int division for now, or use a util
-                    // Let's keep it string based or use simple math
-                    const val = Number(balanceBigInt) / (10 ** metadata.decimals)
+                    const val = Number(balanceBigInt) / Number(divisor)
                     formatted = val.toString()
                 }
 

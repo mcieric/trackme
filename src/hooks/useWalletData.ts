@@ -4,8 +4,11 @@ import { fetchChainTokens } from '@/lib/alchemy'
 import { SUPPORTED_CHAINS } from '@/config/chains'
 import { formatEther } from 'viem'
 
+import { fetchBlockscoutTokens } from '@/lib/blockscout'
+
 // Hardcoded supported alchemy chains for now to match our config
 const ALCHEMY_CHAINS = [1, 10, 8453, 42161, 137]
+const BLOCKSCOUT_CHAINS = [10, 8453] // Optimism and Base
 
 export function useWalletData(address: string) {
     const query = useQuery({
@@ -28,47 +31,81 @@ export function useWalletData(address: string) {
             })
 
             // 2. Fetch ERC20 Tokens via Alchemy (Parallel)
-            const tokenPromises = ALCHEMY_CHAINS.map(async (chainId) => {
+            const alchemyPromises = ALCHEMY_CHAINS.map(async (chainId) => {
                 return await fetchChainTokens(chainId, address)
             })
 
-            const [nativeResults, tokenResults] = await Promise.all([
+            // 3. Fetch ERC20 Tokens via Blockscout (Parallel)
+            const blockscoutPromises = BLOCKSCOUT_CHAINS.map(async (chainId) => {
+                return await fetchBlockscoutTokens(chainId, address)
+            })
+
+            const [nativeResults, alchemyResults, blockscoutResults] = await Promise.all([
                 Promise.all(nativePromises),
-                Promise.all(tokenPromises)
+                Promise.all(alchemyPromises),
+                Promise.all(blockscoutPromises)
             ])
 
-            // 3. Flatten and Process
+            // 4. Flatten and Merge
             const validNative = nativeResults.filter(Boolean) as any[]
-            const validTokens = tokenResults.flat()
 
-            // 4. Fetch Prices (Native + Top Tokens if possible)
+            // Create a Map to merge tokens by unique key (chainId + contractAddress)
+            // Priority: Alchemy data (usually better metadata) -> Blockscout data
+            const tokenMap = new Map<string, any>()
+
+            // Helper to add tokens to map
+            const addTokens = (tokens: any[]) => {
+                for (const t of tokens) {
+                    const key = `${t.chainId}-${t.contractAddress.toLowerCase()}`
+                    if (!tokenMap.has(key)) {
+                        tokenMap.set(key, t)
+                    }
+                }
+            }
+
+            // Add Alchemy first (primary source)
+            addTokens(alchemyResults.flat())
+
+            // Add Blockscout second (fill gaps)
+            addTokens(blockscoutResults.flat())
+
+            const validTokens = Array.from(tokenMap.values())
+
+            // 5. Fetch Prices (Native + Top Tokens if possible)
             const prices = await fetchTokenPrices()
 
             const finalBalances = []
 
             // Add Native
             for (const item of validNative) {
+                // item.balance is the object returned from getNativeBalance containing { balance, formatted, symbol ... }
+                const nativeData = item.balance
+
                 // Determine price ID: either direct map or fallback to symbol map (e.g. ETH)
                 const priceId = SYMBOL_MAP[item.symbol] || item.symbol.toLowerCase()
-                // CoinGecko structure is { "ethereum": { "usd": 3000 } } or flat { "ethereum": 3000 } depending on endpoint?
-                // Our api.ts calls simple/price?ids=...&vs_currencies=usd -> returns { "ethereum": { "usd": 3200 } }
 
+                // Use nativeData.formatted which is already computed
                 const unitPrice = prices[priceId]?.usd || 0
-                const value = parseFloat(formatEther(item.balance)) * unitPrice
+                const value = parseFloat(nativeData.formatted) * unitPrice
 
                 finalBalances.push({
-                    ...item,
-                    formatted: formatEther(item.balance),
+                    chainId: item.chainId,
+                    contractAddress: undefined, // Native has no contract
+                    balance: nativeData.balance,
+                    symbol: item.symbol,
+                    formatted: nativeData.formatted,
                     price: unitPrice,
                     value,
                     name: 'Native Token',
-                    logo: undefined
+                    logo: undefined,
+                    isNative: true
                 })
             }
 
             // Add Tokens (Price set via Map)
             for (const token of validTokens) {
-                const priceId = SYMBOL_MAP[token.symbol.toUpperCase()]
+                // Try symbol first, then specific contract address
+                const priceId = SYMBOL_MAP[token.symbol.toUpperCase()] || SYMBOL_MAP[token.contractAddress.toLowerCase()]
                 const unitPrice = priceId ? (prices[priceId]?.usd || 0) : 0
 
                 const value = parseFloat(token.formatted) * unitPrice
@@ -86,10 +123,12 @@ export function useWalletData(address: string) {
                 })
             }
 
-            const totalValue = finalBalances.reduce((acc, curr) => acc + curr.value, 0)
+            // 6. Filter Dust (Value < $0.05)
+            const filteredBalances = finalBalances.filter(b => b.value >= 0.05)
+            const totalValue = filteredBalances.reduce((acc, curr) => acc + curr.value, 0)
 
             return {
-                balances: finalBalances,
+                balances: filteredBalances,
                 totalValue
             }
         },

@@ -31,15 +31,20 @@ export function AssetTable({ balances, selectedChain }: AssetTableProps) {
                     </thead>
                     <tbody className="divide-y divide-zinc-800/50">
                         {sortedBalances.map((item) => (
-                            <tr key={`${item.chainId}-${item.symbol}`} className="hover:bg-zinc-800/30 transition-colors group">
+                            <tr key={`${item.chainId}-${item.contractAddress || item.symbol}`} className="hover:bg-zinc-800/30 transition-colors group">
                                 <td className="px-6 py-4 whitespace-nowrap">
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-white border border-zinc-700">
-                                            {item.symbol[0]}
+                                            {item.logo ? (
+                                                /* eslint-disable-next-line @next/next/no-img-element */
+                                                <img src={item.logo} alt={item.symbol} className="w-full h-full rounded-full object-cover" />
+                                            ) : (
+                                                item.symbol[0]
+                                            )}
                                         </div>
                                         <div>
                                             <div className="font-bold text-white">{item.symbol}</div>
-                                            <div className="text-xs text-zinc-500">Native Token</div>
+                                            <div className="text-xs text-zinc-500">{item.isNative ? 'Native Token' : item.name}</div>
                                         </div>
                                     </div>
                                 </td>

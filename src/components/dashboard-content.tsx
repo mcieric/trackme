@@ -164,6 +164,7 @@ export function DashboardContent() {
                     <AssetTable balances={balances} selectedChain={selectedChain} />
                 </motion.div>
 
+
             </div>
         </div>
     )
