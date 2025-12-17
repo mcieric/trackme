@@ -1,0 +1,8 @@
+Fetching https://ethereum-optimism.github.io/optimism.tokenlist.json
+Total Soneium (1868) tokens found: 6
+Token: EL (0xBC63230d1C4d0Cd241D66F5AaE75f3D1d6C0949a) - Valid: true
+Token: QUICK (0x6ef08F42C936f5d101B76160c816D3c8181C9867) - Valid: true
+Token: rETH (0x94Cac393f3444cEf63a651FfC18497E7e8bd036a) - Valid: true
+Token: SUPER (0xF765356C901a064A74Fa4560622f21C91048c3D7) - Valid: true
+Token: TRALA (0xf93322688ddfE432c21c0B4E709d77DEab7e923F) - Valid: true
+Token: USDÔé«0 (0x102d758f688a4C1C5a80b116bD945d4455460282) - Valid: true

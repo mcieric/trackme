@@ -1,0 +1,6 @@
+[dotenv@17.2.3] injecting env (1) from .env.local -- tip: ÔÜÖ´©Å  suppress all logs with { quiet: true }
+Checking tokens for 0x88ac3d64230c8a453492ff908a02daa27e9b3429 on Base (8453)...
+Found 100 token balances
+Found 78 non-zero token balances
+MATCH FOUND: Symbol: JESSE, Address: 0x0147608bac3e37d380443cfd1e8869ee8f7c974d, Balance: 1
+MATCH FOUND: Symbol: AERO, Address: 0x295ed817ac3c8b12f023a61f7a35cb8f917f8ff3, Balance: 15.135232

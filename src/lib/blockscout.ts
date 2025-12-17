@@ -5,7 +5,13 @@ import { formatUnits } from 'viem'
 // Explorer API endpoints
 const EXPLORERS = {
     [8453]: 'https://base.blockscout.com/api',
-    [10]: 'https://optimism.blockscout.com/api'
+    [10]: 'https://optimism.blockscout.com/api',
+    [1868]: 'https://soneium.blockscout.com/api',
+    [42220]: 'https://celo.blockscout.com/api'
+}
+
+export function isBlockscoutSupported(chainId: number): boolean {
+    return !!EXPLORERS[chainId as keyof typeof EXPLORERS]
 }
 
 interface BlockscoutToken {

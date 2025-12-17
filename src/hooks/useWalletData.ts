@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { getNativeBalance, fetchTokenPrices, SYMBOL_MAP } from '@/lib/api'
 import { SUPPORTED_CHAINS } from '@/config/chains'
-import { createPublicClient, http, formatUnits, erc20Abi } from 'viem'
+import { fetchChainTokens, isAlchemySupported } from '@/lib/alchemy'
+import { fetchBlockscoutTokens, isBlockscoutSupported } from '@/lib/blockscout'
 import { getTokensForChain } from '@/lib/token-list'
+import { createPublicClient, http, formatUnits, erc20Abi } from 'viem'
 
 // Define interfaces for our internal data structures
 interface TokenBalance {
@@ -39,52 +41,57 @@ export function useWalletData(address: string) {
                 }
             })
 
-            // 2. Fetch Token Balances from Superchain List
+            // 2. Fetch Token Balances (Dynamic Strategy Pattern)
             const tokenPromises = SUPPORTED_CHAINS.map(async (chain) => {
                 try {
-                    // Get tokens from the official list for this chain
-                    const tokens = await getTokensForChain(chain.id)
+                    // Strategy 1: Alchemy (Preferred - Fast & Accurate)
+                    if (isAlchemySupported(chain.id)) {
+                        return await fetchChainTokens(chain.id, address)
+                    }
+                    // Strategy 2: Blockscout (Good for new chains like Soneium/Celo)
+                    else if (isBlockscoutSupported(chain.id)) {
+                        return await fetchBlockscoutTokens(chain.id, address)
+                    }
+                    // Strategy 3: Fallback (Official List + RPC)
+                    else {
+                        const tokens = await getTokensForChain(chain.id)
+                        if (tokens.length === 0) return []
 
-                    if (tokens.length === 0) return []
+                        const client = createPublicClient({
+                            chain: chain,
+                            transport: http(),
+                            batch: { multicall: true }
+                        })
 
-                    const client = createPublicClient({
-                        chain: chain,
-                        transport: http(),
-                        batch: {
-                            multicall: true
-                        }
-                    })
+                        const results = await Promise.all(tokens.map(async (token) => {
+                            try {
+                                const balance = await client.readContract({
+                                    address: token.address as `0x${string}`,
+                                    abi: erc20Abi,
+                                    functionName: 'balanceOf',
+                                    args: [address as `0x${string}`]
+                                })
 
-                    // Fetch balances
-                    const results = await Promise.all(tokens.map(async (token) => {
-                        try {
-                            const balance = await client.readContract({
-                                address: token.address as `0x${string}`,
-                                abi: erc20Abi,
-                                functionName: 'balanceOf',
-                                args: [address as `0x${string}`]
-                            })
+                                if (balance === BigInt(0)) return null
 
-                            if (balance === BigInt(0)) return null
-
-                            return {
-                                chainId: chain.id,
-                                contractAddress: token.address,
-                                balance: balance.toString(),
-                                formatted: formatUnits(balance, token.decimals),
-                                symbol: token.symbol,
-                                name: token.name,
-                                decimals: token.decimals,
-                                logo: token.logoURI
+                                return {
+                                    chainId: chain.id,
+                                    contractAddress: token.address,
+                                    balance: balance.toString(),
+                                    formatted: formatUnits(balance, token.decimals),
+                                    symbol: token.symbol,
+                                    name: token.name,
+                                    decimals: token.decimals,
+                                    logo: token.logoURI
+                                }
+                            } catch (e) {
+                                return null
                             }
-                        } catch (e) {
-                            return null
-                        }
-                    }))
-
-                    return results.filter((t): t is NonNullable<typeof t> => t !== null)
+                        }))
+                        return results.filter((t): t is NonNullable<typeof t> => t !== null)
+                    }
                 } catch (error) {
-                    console.error(`Error fetching tokens for chain ${chain.id}:`, error)
+                    console.error(`Error fetching tokens for chain ${chain.id}`, error)
                     return []
                 }
             })
@@ -130,6 +137,9 @@ export function useWalletData(address: string) {
 
             // Add Tokens
             for (const token of allTokens) {
+                // Skip if contractAddress is missing (should not happen for ERC20)
+                if (!token.contractAddress) continue
+
                 const chain = SUPPORTED_CHAINS.find(c => c.id === token.chainId)
                 const isTestnet = chain?.testnet === true
 
@@ -148,7 +158,7 @@ export function useWalletData(address: string) {
                     price: unitPrice,
                     value,
                     name: token.name,
-                    decimals: token.decimals,
+                    decimals: token.decimals || 18,
                     logo: token.logo,
                     isNative: false
                 })
@@ -157,7 +167,8 @@ export function useWalletData(address: string) {
             // 5. Filter Dust handling
             const filteredBalances = finalBalances.filter(b => {
                 const chain = SUPPORTED_CHAINS.find(c => c.id === b.chainId)
-                if (chain?.testnet) return true
+                // check chain testnet removed to enforce strict value filter everywhere
+                // Strict filter: Keep only if value >= $0.05
                 return (b.value || 0) >= 0.05
             })
 
@@ -169,7 +180,7 @@ export function useWalletData(address: string) {
             }
         },
         enabled: !!address && address.startsWith('0x') && address.length === 42,
-        refetchInterval: 30000
+        refetchInterval: 60000
     })
 
     return {

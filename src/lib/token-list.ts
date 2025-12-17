@@ -21,7 +21,7 @@ export interface TokenList {
     tokens: TokenListToken[]
 }
 
-const SUPERCHAIN_TOKEN_LIST_URL = 'https://ethereum-optimism.github.io/optimism.tokenlist.json'
+const SUPERCHAIN_TOKEN_LIST_URL = '/api/token-list'
 
 let cachedTokenList: TokenList | null = null
 

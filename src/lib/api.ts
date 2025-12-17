@@ -1,4 +1,4 @@
-import { createPublicClient, http, formatUnits } from 'viem'
+import { createPublicClient, http, fallback, formatUnits } from 'viem'
 import { SUPPORTED_CHAINS, SupportedChainId } from '@/config/chains'
 
 const COINGECKO_IDS = [
@@ -37,19 +37,50 @@ const COINGECKO_IDS = [
     'shiba-inu',
     'dogecoin',
     'dogwifhat',
-    'bonk'
+    'bonk',
+    // New Chains support
+    'renzo-restaked-eth',
+    'stakestone-ether',
+    'rs-eth',
+    'celo',
+    'celo-dollar',
+    'celo-euro',
+    'enjoy',
+    'toshi',
+    'echelon-prime',
+    'virtual-protocol',
+    'axelar',
+    'balancer',
+    'sushi',
+    'tether-gold',
+    'sweat-economy',
+    'glo-dollar',
+    'gooddollar',
+    'ubeswap',
+    'linea',
+    'trusta-ai',
+    'linea-bridged-wsteth',
+    'zerolend',
+    'wrapped-staked-eth',
+    'jesse',
+    'talent-protocol',
+    'coinbase-wrapped-btc',
+    'masa',
+    'altlayer',
+    'azuro-protocol'
 ]
 
 // Simple mapping for demo
 export const SYMBOL_MAP: Record<string, string> = {
     'ETH': 'ethereum',
     'WETH': 'ethereum',
+    'ALT': 'altlayer',
+    'AZUR': 'azuro-protocol',
     'OP': 'optimism',
     'VELO': 'velodrome-finance',
     'VELO V2': 'velodrome-finance',
     'VELO(V2)': 'velodrome-finance',
     'USDC.E': 'usd-coin',
-    'USDC.e': 'usd-coin',
     'ASTR': 'astar',
     'USDC': 'usd-coin',
     'USDT': 'tether',
@@ -77,14 +108,44 @@ export const SYMBOL_MAP: Record<string, string> = {
     'RDNT': 'radiant-capital',
     'SEAM': 'seamless-protocol',
     'WELL': 'moonwell',
-    'PRIME': 'prime',
     'PEPE': 'pepe',
     'SHIB': 'shiba-inu',
     'DOGE': 'dogecoin',
     'WIF': 'dogwifhat',
     'BONK': 'bonk',
+    // Linea
+    'EZETH': 'renzo-restaked-eth',
+    'STONE': 'stakestone-ether',
+    'WRSETH': 'rs-eth',
+    'LINEA': 'linea', // Linea Ecosystem Token
+    'TA': 'trusta-ai',
+    'WSTETH': 'wrapped-staked-eth', // Default
+    'ZERO': 'zerolend',
+    // Celo
+    'CELO': 'celo',
+    'CUSD': 'celo-dollar',
+    'CEUR': 'celo-euro',
+    // Zora
+    'ENJOY': 'enjoy',
+    // Base
+    'TOSHI': 'toshi',
+    'PRIME': 'echelon-prime',
+    'VIRTUAL': 'virtual-protocol',
+    'BAL': 'balancer',
+    'SUSHI': 'sushi',
+    'XAUT': 'tether-gold',
+    'SWEAT': 'sweat-economy',
+    'JESSE': 'jesse',
+    'TALENT': 'talent-protocol',
+    'CBBTC': 'coinbase-wrapped-btc',
+    'MASA': 'masa',
+    // Celo
+    'USDGLO': 'glo-dollar',
+    'G$': 'gooddollar',
+    'UBE': 'ubeswap',
     // Contract Addresses
-    '0x9560e827af36c94d2ac33a39bce1fe78631088db': 'velodrome-finance'
+    '0x9560e827af36c94d2ac33a39bce1fe78631088db': 'velodrome-finance',
+    '0xb5bedd42000b71fdde22d3ee8a79bd49a568fc8f': 'linea-bridged-wsteth' // wstETH on Linea
 }
 
 export async function fetchTokenPrices() {
@@ -117,16 +178,22 @@ export async function getNativeBalance(address: string, chainId: SupportedChainI
         10: 'opt-mainnet',
         8453: 'base-mainnet',
         42161: 'arb-mainnet',
-        137: 'polygon-mainnet'
+        137: 'polygon-mainnet',
+        59144: 'linea-mainnet',
+        7777777: 'zora-mainnet'
     }
 
-    const transportUrl = (API_KEY && ALCHEMY_NETWORKS[chainId])
-        ? `https://${ALCHEMY_NETWORKS[chainId]}.g.alchemy.com/v2/${API_KEY}`
-        : undefined
+    const transports = []
+
+    if (API_KEY && ALCHEMY_NETWORKS[chainId]) {
+        transports.push(http(`https://${ALCHEMY_NETWORKS[chainId]}.g.alchemy.com/v2/${API_KEY}`))
+    }
+    // Always add default http transport as fallback
+    transports.push(http())
 
     const client = createPublicClient({
         chain,
-        transport: http(transportUrl)
+        transport: fallback(transports)
     })
 
     try {

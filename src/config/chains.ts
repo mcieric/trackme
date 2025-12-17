@@ -1,5 +1,5 @@
 import { defineChain } from 'viem'
-import { mainnet, optimism, base, arbitrum, polygon } from 'viem/chains'
+import { mainnet, optimism, base, arbitrum, polygon, linea, zora, celo } from 'viem/chains'
 
 // Soneium Mainnet
 export const soneium = defineChain({
@@ -25,6 +25,9 @@ export const SUPPORTED_CHAINS = [
     optimism,
     arbitrum,
     polygon,
+    linea,
+    zora,
+    celo,
     soneium,
 ] as const
 
@@ -36,6 +39,9 @@ export const CHAIN_ICONS: Record<number, string> = {
     [optimism.id]: '/icons/optimism.svg',
     [arbitrum.id]: '/icons/arbitrum.svg',
     [polygon.id]: '/icons/polygon.svg',
+    [linea.id]: '/icons/linea.svg',
+    [zora.id]: '/icons/zora.svg',
+    [celo.id]: '/icons/celo.svg',
     [soneium.id]: '/icons/soneium.svg?v=2',
 }
 
