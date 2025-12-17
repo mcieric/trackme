@@ -1,0 +1,23 @@
+--- Debugging Optimism (Chain ID 10) ---
+1. Fetching Token List...
+Found 195 tokens for Optimism in the raw list.
+Found 195 VALID tokens for Optimism after validation.
+Sample Token: {
+  chainId: 10,
+  address: '0xe0BB0D3DE8c10976511e5030cA403dBf4c25165B',
+  name: '0xBitcoin',
+  symbol: '0xBTC',
+  decimals: 8,
+  logoURI: 'https://ethereum-optimism.github.io/data/0xBTC/logo.png',
+  extensions: {
+    optimismBridgeAddress: '0x4200000000000000000000000000000000000010',
+    opListId: 'extended',
+    opTokenId: '0xBTC'
+  }
+}
+
+2. Checking Native Balance via Public RPC...
+Native Balance (ETH): 0.002449553924717581
+
+3. Checking Token Balances (USDC/OP)...
+OP Balance: 345163072728326.440993 (assuming 6 decimals for simplicity, check actual)

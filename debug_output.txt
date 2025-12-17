@@ -1,0 +1,22 @@
+--- Debugging Optimism (Chain ID 10) ---
+1. Fetching Token List...
+Found 7 tokens for Optimism in the raw list.
+Found 7 VALID tokens for Optimism after validation.
+Sample Token: {
+  name: 'APWine Token',
+  symbol: 'APW',
+  decimals: 18,
+  logoURI: 'https://res.cloudinary.com/supermigrate/image/upload/v1722496538/migrations/ll9v3hu79vvthy9noqjq.svg',
+  address: '0x92a2a0d39da80e1fa21afdebdd87c4f975adf9f0',
+  chainId: 10,
+  extensions: {
+    opTokenId: 'APW',
+    standardBridgeAddresses: { '1': '0x4200000000000000000000000000000000000010' }
+  }
+}
+
+2. Checking Native Balance via Public RPC...
+Native Balance (ETH): 0.002449553924717581
+
+3. Checking Token Balances (USDC/OP)...
+OP Balance: 345163072728326.440993 (assuming 6 decimals for simplicity, check actual)

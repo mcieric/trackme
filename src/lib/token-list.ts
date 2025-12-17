@@ -21,7 +21,7 @@ export interface TokenList {
     tokens: TokenListToken[]
 }
 
-const SUPERCHAIN_TOKEN_LIST_URL = 'https://raw.githubusercontent.com/superbridgeapp/token-lists/main/superchain.tokenlist.json'
+const SUPERCHAIN_TOKEN_LIST_URL = 'https://ethereum-optimism.github.io/optimism.tokenlist.json'
 
 let cachedTokenList: TokenList | null = null
 
