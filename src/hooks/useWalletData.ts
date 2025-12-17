@@ -1,46 +1,29 @@
 import { useQuery } from '@tanstack/react-query'
 import { getNativeBalance, fetchTokenPrices, SYMBOL_MAP } from '@/lib/api'
-import { fetchChainTokens } from '@/lib/alchemy'
 import { SUPPORTED_CHAINS } from '@/config/chains'
-import { formatEther } from 'viem'
-
-import { fetchBlockscoutTokens } from '@/lib/blockscout'
 import { createPublicClient, http, formatUnits, erc20Abi } from 'viem'
-import { soneium } from '@/config/chains'
-import { mainnet, base } from 'viem/chains'
+import { getTokensForChain } from '@/lib/token-list'
 
-// Explicit tokens to track on Soneium
-const SONEIUM_TOKENS = [
-    { address: '0xba9986d2381edf1da03b0b9c1f8b00dc4aacc369', symbol: 'USDC.e', decimals: 6, name: 'Bridged USDC' },
-    { address: '0x2CAE934a1e84F693fbb78CA5ED3B0A6893259441', symbol: 'ASTR', decimals: 18, name: 'Astar' }
-] as const
-
-// Explicit tokens for Base (Safety Net)
-const BASE_TOKENS = [
-    { address: '0x532f27101965dd16442e59d40670faf5ebb142e4', symbol: 'BRETT', decimals: 18, name: 'Brett' },
-    { address: '0x4ed4e862860bed51a9570b96d89af5e1b0efefed', symbol: 'DEGEN', decimals: 18, name: 'Degen' },
-    { address: '0x940181a94444545b6e4C8d2188A3983FfF38fd98631', symbol: 'AERO', decimals: 18, name: 'Aerodrome' }
-] as const
-
-// Explicit tokens for Ethereum (Safety Net)
-const ETH_TOKENS = [
-    { address: '0xdac17f958d2ee523a2206206994597c13d831ec7', symbol: 'USDT', decimals: 6, name: 'Tether USD' },
-    { address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', symbol: 'USDC', decimals: 6, name: 'USD Coin' },
-    { address: '0x514910771af9ca653ac0797bc097d294a7e9aca3', symbol: 'LINK', decimals: 18, name: 'Chainlink' },
-    { address: '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984', symbol: 'UNI', decimals: 18, name: 'Uniswap' },
-    { address: '0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE', symbol: 'SHIB', decimals: 18, name: 'Shiba Inu' },
-    { address: '0x6982508145454ce325ddbe47a25d4ec3d2311933', symbol: 'PEPE', decimals: 18, name: 'Pepe' }
-] as const
-
-// Hardcoded supported alchemy chains for now to match our config
-const ALCHEMY_CHAINS = [1, 10, 8453, 42161, 137]
-const BLOCKSCOUT_CHAINS = [1, 10, 8453, 42161, 137, 1868] // All major chains + Soneium
+// Define interfaces for our internal data structures
+interface TokenBalance {
+    chainId: number
+    contractAddress?: string
+    balance: bigint | string
+    formatted: string
+    symbol: string
+    name: string
+    decimals: number
+    logo?: string
+    isNative: boolean
+    price?: number
+    value?: number
+}
 
 export function useWalletData(address: string) {
     const query = useQuery({
         queryKey: ['wallet-data', address],
         queryFn: async () => {
-            // 1. Fetch Native Balances (Existing logic)
+            // 1. Fetch Native Balances
             const nativePromises = SUPPORTED_CHAINS.map(async (chain) => {
                 try {
                     const balance = await getNativeBalance(address, chain.id)
@@ -56,112 +39,75 @@ export function useWalletData(address: string) {
                 }
             })
 
-            // 2. Fetch ERC20 Tokens via Alchemy (Parallel)
-            const alchemyPromises = ALCHEMY_CHAINS.map(async (chainId) => {
-                return await fetchChainTokens(chainId, address)
-            })
-
-            // 3. Fetch ERC20 Tokens via Blockscout (Parallel)
-            const blockscoutPromises = BLOCKSCOUT_CHAINS.map(async (chainId) => {
-                return await fetchBlockscoutTokens(chainId, address)
-            })
-
-            // 4. Explicit RPC Fetch (Manual Safety Net for Soneium, Base, Eth)
-            const manualRpcFetch = async (chainConfig: any, tokens: readonly any[]) => {
+            // 2. Fetch Token Balances from Superchain List
+            const tokenPromises = SUPPORTED_CHAINS.map(async (chain) => {
                 try {
+                    // Get tokens from the official list for this chain
+                    const tokens = await getTokensForChain(chain.id)
+
+                    if (tokens.length === 0) return []
+
                     const client = createPublicClient({
-                        chain: chainConfig,
-                        transport: http()
+                        chain: chain,
+                        transport: http(),
+                        batch: {
+                            multicall: true
+                        }
                     })
 
+                    // Fetch balances
                     const results = await Promise.all(tokens.map(async (token) => {
                         try {
                             const balance = await client.readContract({
-                                address: token.address,
+                                address: token.address as `0x${string}`,
                                 abi: erc20Abi,
                                 functionName: 'balanceOf',
                                 args: [address as `0x${string}`]
                             })
 
-                            if (balance === 0n) return null
+                            if (balance === BigInt(0)) return null
 
                             return {
-                                chainId: chainConfig.id,
+                                chainId: chain.id,
                                 contractAddress: token.address,
                                 balance: balance.toString(),
                                 formatted: formatUnits(balance, token.decimals),
                                 symbol: token.symbol,
                                 name: token.name,
                                 decimals: token.decimals,
-                                logo: undefined
+                                logo: token.logoURI
                             }
                         } catch (e) {
                             return null
                         }
                     }))
-                    return results.filter(Boolean)
-                } catch (e) {
+
+                    return results.filter((t): t is NonNullable<typeof t> => t !== null)
+                } catch (error) {
+                    console.error(`Error fetching tokens for chain ${chain.id}:`, error)
                     return []
                 }
-            }
+            })
 
-            const soneiumPromise = manualRpcFetch(soneium, SONEIUM_TOKENS)
-            const basePromise = manualRpcFetch(base, BASE_TOKENS)
-            const ethPromise = manualRpcFetch(mainnet, ETH_TOKENS)
-
-            const [nativeResults, alchemyResults, blockscoutResults, soneiumTokens, baseTokens, ethTokens] = await Promise.all([
+            const [nativeResults, ...tokenResults] = await Promise.all([
                 Promise.all(nativePromises),
-                Promise.all(alchemyPromises),
-                Promise.all(blockscoutPromises),
-                soneiumPromise,
-                basePromise,
-                ethPromise
+                Promise.all(tokenPromises)
             ])
 
-            // 4. Flatten and Merge
-            const validNative = nativeResults.filter(Boolean) as any[]
+            // 3. Flatten and Merge
+            const validNative = nativeResults.filter((n): n is NonNullable<typeof n> => n !== null)
+            const allTokens = tokenResults.flat().flat().filter((t): t is NonNullable<typeof t> => t !== null)
 
-            // Create a Map to merge tokens by unique key (chainId + contractAddress)
-            // Priority: Alchemy data (usually better metadata) -> Blockscout data
-            const tokenMap = new Map<string, any>()
-
-            // Helper to add tokens to map
-            const addTokens = (tokens: any[]) => {
-                for (const t of tokens) {
-                    const key = `${t.chainId}-${t.contractAddress.toLowerCase()}`
-                    if (!tokenMap.has(key)) {
-                        tokenMap.set(key, t)
-                    }
-                }
-            }
-
-            // Add Alchemy first (primary source)
-            addTokens(alchemyResults.flat())
-
-            // Add Blockscout second (fill gaps)
-            addTokens(blockscoutResults.flat())
-
-            // Add Manual RPC tokens (High priority/fallback)
-            addTokens(soneiumTokens as any[])
-            addTokens(baseTokens as any[])
-            addTokens(ethTokens as any[])
-
-            const validTokens = Array.from(tokenMap.values())
-
-            // 5. Fetch Prices (Native + Top Tokens if possible)
+            // 4. Fetch Prices
             const prices = await fetchTokenPrices()
 
-            const finalBalances = []
+            const finalBalances: TokenBalance[] = []
 
             // Add Native
             for (const item of validNative) {
-                // item.balance is the object returned from getNativeBalance containing { balance, formatted, symbol ... }
                 const nativeData = item.balance
-
-                // Determine price ID: either direct map or fallback to symbol map (e.g. ETH)
                 const priceId = SYMBOL_MAP[item.symbol] || item.symbol.toLowerCase()
 
-                // Use nativeData.formatted which is already computed
                 const chain = SUPPORTED_CHAINS.find(c => c.id === item.chainId)
                 const isTestnet = chain?.testnet === true
                 const unitPrice = isTestnet ? 0 : (prices[priceId]?.usd || 0)
@@ -169,7 +115,7 @@ export function useWalletData(address: string) {
 
                 finalBalances.push({
                     chainId: item.chainId,
-                    contractAddress: undefined, // Native has no contract
+                    contractAddress: undefined,
                     balance: nativeData.balance,
                     symbol: item.symbol,
                     formatted: nativeData.formatted,
@@ -177,16 +123,17 @@ export function useWalletData(address: string) {
                     value,
                     name: 'Native Token',
                     logo: undefined,
-                    isNative: true
+                    isNative: true,
+                    decimals: chain?.nativeCurrency.decimals || 18
                 })
             }
 
-            // Add Tokens (Price set via Map)
-            for (const token of validTokens) {
-                // Try symbol first, then specific contract address
+            // Add Tokens
+            for (const token of allTokens) {
                 const chain = SUPPORTED_CHAINS.find(c => c.id === token.chainId)
                 const isTestnet = chain?.testnet === true
 
+                // Try symbol first, then contract address fallback for price mapping
                 const priceId = SYMBOL_MAP[token.symbol.toUpperCase()] || SYMBOL_MAP[token.contractAddress.toLowerCase()]
                 const unitPrice = (priceId && !isTestnet) ? (prices[priceId]?.usd || 0) : 0
 
@@ -194,25 +141,27 @@ export function useWalletData(address: string) {
 
                 finalBalances.push({
                     chainId: token.chainId,
+                    contractAddress: token.contractAddress,
                     balance: BigInt(token.balance),
                     symbol: token.symbol,
                     formatted: token.formatted,
                     price: unitPrice,
                     value,
                     name: token.name,
+                    decimals: token.decimals,
                     logo: token.logo,
                     isNative: false
                 })
             }
 
-            // 6. Filter Dust (Value < $0.05, keep testnet tokens or manual whitelist if needed)
-            // For now, if it's testnet, we keep it even if 0 value (so user can see their assets)
+            // 5. Filter Dust handling
             const filteredBalances = finalBalances.filter(b => {
                 const chain = SUPPORTED_CHAINS.find(c => c.id === b.chainId)
                 if (chain?.testnet) return true
-                return b.value >= 0.05
+                return (b.value || 0) >= 0.05
             })
-            const totalValue = filteredBalances.reduce((acc, curr) => acc + curr.value, 0)
+
+            const totalValue = filteredBalances.reduce((acc, curr) => acc + (curr.value || 0), 0)
 
             return {
                 balances: filteredBalances,

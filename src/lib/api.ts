@@ -141,7 +141,7 @@ export async function getNativeBalance(address: string, chainId: SupportedChainI
         console.error(`Error fetching balance for ${chain.name}:`, error)
         return {
             chainId,
-            balance: 0n,
+            balance: BigInt(0),
             formatted: '0',
             symbol: chain.nativeCurrency.symbol
         }

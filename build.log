@@ -1,0 +1,23 @@
+
+> trackme@0.1.0 build
+> next build
+
+   Ôû▓ Next.js 16.0.10 (Turbopack)
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ Ô£ô Compiled successfully in 4.9s
+   Running TypeScript ...
+Failed to compile.
+
+./src/lib/api.ts:144:22
+Type error: BigInt literals are not available when targeting lower than ES2020.
+
+  142 |         return {
+  143 |             chainId,
+> 144 |             balance: 0n,
+      |                      ^
+  145 |             formatted: '0',
+  146 |             symbol: chain.nativeCurrency.symbol
+  147 |         }
+Next.js build worker exited with code: 1 and signal: null
