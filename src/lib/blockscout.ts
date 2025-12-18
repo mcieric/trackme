@@ -1,13 +1,20 @@
-
 import { TokenBalance } from './alchemy'
 import { formatUnits } from 'viem'
 
 // Explorer API endpoints
-const EXPLORERS = {
-    [8453]: 'https://base.blockscout.com/api',
-    [10]: 'https://optimism.blockscout.com/api',
-    [1868]: 'https://soneium.blockscout.com/api',
-    [42220]: 'https://celo.blockscout.com/api'
+const EXPLORERS: Record<number, string> = {
+    1: 'https://eth.blockscout.com/api',
+    10: 'https://optimism.blockscout.com/api',
+    8453: 'https://base.blockscout.com/api',
+    42161: 'https://arbitrum.blockscout.com/api',
+    137: 'https://polygon.blockscout.com/api',
+    1868: 'https://soneium.blockscout.com/api',
+    42220: 'https://celo.blockscout.com/api',
+    56: 'https://bsc.blockscout.com/api',
+    43114: 'https://avalanche.blockscout.com/api',
+    81457: 'https://blast.blockscout.com/api',
+    534352: 'https://scroll.blockscout.com/api',
+    5000: 'https://mantle.blockscout.com/api'
 }
 
 export function isBlockscoutSupported(chainId: number): boolean {

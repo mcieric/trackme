@@ -27,11 +27,12 @@ export function AssetTable({ balances, selectedChain }: AssetTableProps) {
                             <th className="px-6 py-4 font-medium tracking-wider text-right">Balance</th>
                             <th className="px-6 py-4 font-medium tracking-wider text-right">Value</th>
                             <th className="px-6 py-4 font-medium tracking-wider text-center">Chain</th>
+                            <th className="px-6 py-4 font-medium tracking-wider text-right">Wallet</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-border/50">
                         {sortedBalances.map((item) => (
-                            <tr key={`${item.chainId}-${item.contractAddress || item.symbol}`} className="hover:bg-muted/30 transition-colors group">
+                            <tr key={`${item.walletAddress}-${item.chainId}-${item.contractAddress || item.symbol}`} className="hover:bg-muted/30 transition-colors group">
                                 <td className="px-6 py-4 whitespace-nowrap">
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs font-bold text-foreground border border-border">
@@ -49,13 +50,21 @@ export function AssetTable({ balances, selectedChain }: AssetTableProps) {
                                     </div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-muted-foreground">
-                                    ${item.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    {item.price && item.price > 0 ? (
+                                        `$${item.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                    ) : (
+                                        <span className="opacity-40 italic text-xs">Unknown</span>
+                                    )}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-muted-foreground">
                                     {parseFloat(item.formatted).toLocaleString(undefined, { maximumFractionDigits: 4 })}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right font-bold text-foreground">
-                                    ${item.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    {item.value && item.value > 0 ? (
+                                        `$${item.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                    ) : (
+                                        <span className="opacity-40 italic text-xs">---</span>
+                                    )}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-center">
                                     <div
@@ -70,11 +79,16 @@ export function AssetTable({ balances, selectedChain }: AssetTableProps) {
                                         )}
                                     </div>
                                 </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-right font-mono text-[10px] text-muted-foreground opacity-70">
+                                    {item.walletAddress ? (
+                                        `${item.walletAddress.slice(0, 6)}...${item.walletAddress.slice(-4)}`
+                                    ) : '???'}
+                                </td>
                             </tr>
                         ))}
                         {sortedBalances.length === 0 && (
                             <tr>
-                                <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground">
+                                <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
                                     No assets found on checked chains.
                                 </td>
                             </tr>

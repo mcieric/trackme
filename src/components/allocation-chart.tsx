@@ -31,43 +31,45 @@ export function AllocationChart({ balances }: AllocationChartProps) {
     if (data.length === 0) return null
 
     return (
-        <Card className="h-[250px] w-full md:w-[350px] bg-card/50 border-border backdrop-blur-sm flex flex-col relative">
+        <Card className="h-[250px] w-full md:w-[350px] bg-card/50 border-border backdrop-blur-sm flex flex-col relative overflow-hidden">
             <div className="absolute top-4 left-4 z-10">
                 <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Allocation</h3>
             </div>
-            <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                    <Pie
-                        data={data}
-                        cx="50%"
-                        cy="55%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={5}
-                        dataKey="value"
-                        stroke="none"
-                    >
-                        {data.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                    </Pie>
-                    <Tooltip
-                        content={({ active, payload }) => {
-                            if (active && payload && payload.length) {
-                                return (
-                                    <div className="bg-popover border border-border p-2 rounded-lg shadow-xl backdrop-blur-md">
-                                        <p className="font-bold text-foreground text-sm">{payload[0].name}</p>
-                                        <p className="text-primary text-xs">
-                                            ${(payload[0].value as number).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                        </p>
-                                    </div>
-                                );
-                            }
-                            return null;
-                        }}
-                    />
-                </PieChart>
-            </ResponsiveContainer>
+            <div className="flex-1 w-full min-h-[200px] mt-4">
+                <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                        <Pie
+                            data={data}
+                            cx="50%"
+                            cy="55%"
+                            innerRadius={60}
+                            outerRadius={80}
+                            paddingAngle={5}
+                            dataKey="value"
+                            stroke="none"
+                        >
+                            {data.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                        </Pie>
+                        <Tooltip
+                            content={({ active, payload }) => {
+                                if (active && payload && payload.length) {
+                                    return (
+                                        <div className="bg-popover border border-border p-2 rounded-lg shadow-xl backdrop-blur-md">
+                                            <p className="font-bold text-foreground text-sm">{payload[0].name}</p>
+                                            <p className="text-primary text-xs">
+                                                ${(payload[0].value as number).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                            </p>
+                                        </div>
+                                    );
+                                }
+                                return null;
+                            }}
+                        />
+                    </PieChart>
+                </ResponsiveContainer>
+            </div>
             {/* Center Label */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none pt-4">
                 <div className="text-center">

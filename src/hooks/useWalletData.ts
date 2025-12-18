@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { getNativeBalance, fetchTokenPrices, SYMBOL_MAP } from '@/lib/api'
+import { getNativeBalance, fetchTokenPrices, SYMBOL_MAP, SCAM_TOKENS } from '@/lib/api'
 import { SUPPORTED_CHAINS } from '@/config/chains'
 import { fetchChainTokens, isAlchemySupported } from '@/lib/alchemy'
 import { fetchBlockscoutTokens, isBlockscoutSupported } from '@/lib/blockscout'
@@ -19,43 +19,77 @@ interface TokenBalance {
     isNative: boolean
     price?: number
     value?: number
+    walletAddress: string
 }
 
-export function useWalletData(address: string) {
-    const query = useQuery({
-        queryKey: ['wallet-data', address],
-        queryFn: async () => {
-            // 1. Fetch Native Balances
-            const nativePromises = SUPPORTED_CHAINS.map(async (chain) => {
-                try {
-                    const balance = await getNativeBalance(address, chain.id)
-                    return {
-                        chainId: chain.id,
-                        balance,
-                        symbol: chain.nativeCurrency.symbol,
-                        isNative: true
-                    }
-                } catch (error) {
-                    console.error(`Error fetching native balance for ${chain.id}:`, error)
-                    return null
-                }
-            })
+export function useWalletData(addresses: string | string[]) {
+    const addressList = Array.isArray(addresses) ? addresses : [addresses]
+    const validAddresses = addressList.filter(a => a && a.startsWith('0x') && a.length === 42)
 
-            // 2. Fetch Token Balances (Dynamic Strategy Pattern)
-            const tokenPromises = SUPPORTED_CHAINS.map(async (chain) => {
-                try {
-                    // Strategy 1: Alchemy (Preferred - Fast & Accurate)
-                    if (isAlchemySupported(chain.id)) {
-                        return await fetchChainTokens(chain.id, address)
+    console.log('useWalletData input addresses:', addresses)
+    console.log('useWalletData valid addresses:', validAddresses)
+
+    const query = useQuery({
+        queryKey: ['wallet-data', validAddresses],
+        queryFn: async () => {
+            console.log('Fetching data for addresses:', validAddresses)
+
+            // 1. Fetch Balances First (Phase 1)
+            const allBalancesResults = await Promise.all(validAddresses.map(async (address) => {
+                // Fetch Native Balances
+                const nativePromises = SUPPORTED_CHAINS.map(async (chain) => {
+                    try {
+                        const balance = await getNativeBalance(address, chain.id)
+                        return {
+                            chainId: chain.id,
+                            balance,
+                            symbol: chain.nativeCurrency.symbol,
+                            isNative: true,
+                            walletAddress: address
+                        }
+                    } catch (error) {
+                        return null
                     }
-                    // Strategy 2: Blockscout (Good for new chains like Soneium/Celo)
-                    else if (isBlockscoutSupported(chain.id)) {
-                        return await fetchBlockscoutTokens(chain.id, address)
-                    }
-                    // Strategy 3: Fallback (Official List + RPC)
-                    else {
-                        const tokens = await getTokensForChain(chain.id)
-                        if (tokens.length === 0) return []
+                })
+
+                // Fetch Token Balances
+                const tokenPromises = SUPPORTED_CHAINS.map(async (chain) => {
+                    try {
+                        let tokens: any[] = []
+
+                        // 1. Try Alchemy first with timeout
+                        if (isAlchemySupported(chain.id)) {
+                            try {
+                                // Add a 5s timeout to keep the app snappy
+                                const alchemyPromise = fetchChainTokens(chain.id, address)
+                                const timeoutPromise = new Promise<any[]>((_, reject) =>
+                                    setTimeout(() => reject(new Error('Alchemy Timeout')), 5000)
+                                )
+
+                                tokens = await Promise.race([alchemyPromise, timeoutPromise])
+                                if (tokens.length > 0) {
+                                    return tokens.map(t => ({ ...t, walletAddress: address }))
+                                }
+                            } catch (e) {
+                                console.warn(`[useWalletData] Alchemy passed for chain ${chain.id}: ${e instanceof Error ? e.message : 'Unknown error'}`)
+                            }
+                        }
+
+                        // 2. Try Blockscout as fallback
+                        if (isBlockscoutSupported(chain.id)) {
+                            try {
+                                const results = await fetchBlockscoutTokens(chain.id, address)
+                                if (results.length > 0) {
+                                    return results.map(t => ({ ...t, walletAddress: address }))
+                                }
+                            } catch (e) {
+                                console.warn(`[useWalletData] Blockscout fallback failed for chain ${chain.id}`)
+                            }
+                        }
+
+                        // 3. Manual Direct RPC Scanning
+                        const manualTokens = await getTokensForChain(chain.id)
+                        if (manualTokens.length === 0) return []
 
                         const client = createPublicClient({
                             chain: chain,
@@ -63,7 +97,7 @@ export function useWalletData(address: string) {
                             batch: { multicall: true }
                         })
 
-                        const results = await Promise.all(tokens.map(async (token) => {
+                        const results = await Promise.all(manualTokens.map(async (token) => {
                             try {
                                 const balance = await client.readContract({
                                     address: token.address as `0x${string}`,
@@ -82,77 +116,86 @@ export function useWalletData(address: string) {
                                     symbol: token.symbol,
                                     name: token.name,
                                     decimals: token.decimals,
-                                    logo: token.logoURI
+                                    logo: token.logoURI,
+                                    walletAddress: address
                                 }
                             } catch (e) {
                                 return null
                             }
                         }))
-                        return results.filter((t): t is NonNullable<typeof t> => t !== null)
+                        return results.filter((t): t is NonNullable<typeof t> => t !== null) as any[]
+                    } catch (error) {
+                        return []
                     }
-                } catch (error) {
-                    console.error(`Error fetching tokens for chain ${chain.id}`, error)
-                    return []
+                })
+
+                const [nativeResults, tokenResults] = await Promise.all([
+                    Promise.all(nativePromises),
+                    Promise.all(tokenPromises)
+                ])
+
+                return {
+                    native: nativeResults.filter((n): n is NonNullable<typeof n> => n !== null),
+                    tokens: tokenResults.flat().filter((t): t is NonNullable<typeof t> => t !== null) as any[]
                 }
+            }))
+
+            const allNative = allBalancesResults.flatMap(r => r.native)
+            const allTokens = allBalancesResults.flatMap(r => r.tokens)
+
+            // 2. Identify Unique Price IDs (Phase 2)
+            const priceIdsSet = new Set<string>()
+            allNative.forEach(n => {
+                const id = SYMBOL_MAP[n.symbol] || n.symbol.toLowerCase()
+                if (id) priceIdsSet.add(id)
+            })
+            allTokens.forEach(t => {
+                if (SCAM_TOKENS.has(t.symbol.toUpperCase())) return
+                const id = SYMBOL_MAP[t.contractAddress?.toLowerCase() || ''] || SYMBOL_MAP[t.symbol.toUpperCase()]
+                if (id) priceIdsSet.add(id)
             })
 
-            const [nativeResults, ...tokenResults] = await Promise.all([
-                Promise.all(nativePromises),
-                Promise.all(tokenPromises)
-            ])
+            // 3. Fetch Prices for discovered tokens
+            const prices = await fetchTokenPrices(Array.from(priceIdsSet))
 
-            // 3. Flatten and Merge
-            const validNative = nativeResults.filter((n): n is NonNullable<typeof n> => n !== null)
-            const allTokens = tokenResults.flat().flat().filter((t): t is NonNullable<typeof t> => t !== null)
+            // 4. Map everything together (Phase 3)
+            const walletBalances: TokenBalance[] = []
 
-            // 4. Fetch Prices
-            const prices = await fetchTokenPrices()
-
-            const finalBalances: TokenBalance[] = []
-
-            // Add Native
-            for (const item of validNative) {
-                const nativeData = item.balance
-                const priceId = SYMBOL_MAP[item.symbol] || item.symbol.toLowerCase()
-
+            // Process Native
+            for (const item of allNative) {
                 const chain = SUPPORTED_CHAINS.find(c => c.id === item.chainId)
-                const isTestnet = chain?.testnet === true
-                const unitPrice = isTestnet ? 0 : (prices[priceId]?.usd || 0)
-                const value = parseFloat(nativeData.formatted) * unitPrice
+                const priceId = SYMBOL_MAP[item.symbol] || item.symbol.toLowerCase()
+                const unitPrice = chain?.testnet ? 0 : (prices[priceId]?.usd || 0)
+                const value = parseFloat(item.balance.formatted) * unitPrice
 
-                finalBalances.push({
+                walletBalances.push({
                     chainId: item.chainId,
                     contractAddress: undefined,
-                    balance: nativeData.balance,
+                    balance: item.balance.balance,
                     symbol: item.symbol,
-                    formatted: nativeData.formatted,
+                    formatted: item.balance.formatted,
                     price: unitPrice,
                     value,
                     name: 'Native Token',
                     logo: undefined,
                     isNative: true,
-                    decimals: chain?.nativeCurrency.decimals || 18
+                    decimals: chain?.nativeCurrency.decimals || 18,
+                    walletAddress: item.walletAddress
                 })
             }
 
-            // Add Tokens
+            // Process Tokens
             for (const token of allTokens) {
-                // Skip if contractAddress is missing (should not happen for ERC20)
-                if (!token.contractAddress) continue
-
                 const chain = SUPPORTED_CHAINS.find(c => c.id === token.chainId)
-                const isTestnet = chain?.testnet === true
-
-                // Try symbol first, then contract address fallback for price mapping
-                const priceId = SYMBOL_MAP[token.symbol.toUpperCase()] || SYMBOL_MAP[token.contractAddress.toLowerCase()]
-                const unitPrice = (priceId && !isTestnet) ? (prices[priceId]?.usd || 0) : 0
-
+                const isScam = SCAM_TOKENS.has(token.symbol.toUpperCase())
+                const priceId = isScam ? null : (SYMBOL_MAP[token.contractAddress?.toLowerCase() || ''] || SYMBOL_MAP[token.symbol.toUpperCase()])
+                const unitPrice = (priceId && !chain?.testnet) ? (prices[priceId]?.usd || 0) : 0
                 const value = parseFloat(token.formatted) * unitPrice
 
-                finalBalances.push({
+                walletBalances.push({
                     chainId: token.chainId,
                     contractAddress: token.contractAddress,
-                    balance: BigInt(token.balance),
+                    balance: token.balance.toString(),
                     symbol: token.symbol,
                     formatted: token.formatted,
                     price: unitPrice,
@@ -160,26 +203,27 @@ export function useWalletData(address: string) {
                     name: token.name,
                     decimals: token.decimals || 18,
                     logo: token.logo,
-                    isNative: false
+                    isNative: false,
+                    walletAddress: token.walletAddress
                 })
             }
 
-            // 5. Filter Dust handling
-            const filteredBalances = finalBalances.filter(b => {
-                const chain = SUPPORTED_CHAINS.find(c => c.id === b.chainId)
-                // check chain testnet removed to enforce strict value filter everywhere
-                // Strict filter: Keep only if value >= $0.05
-                return (b.value || 0) >= 0.05
+            // Final filtering and aggregation
+            const finalBalances = walletBalances.filter(b => {
+                const balanceNum = parseFloat(b.formatted)
+                if (balanceNum === 0) return false
+                if (b.price && b.price > 0) return (b.value || 0) >= 0.01
+                return true
             })
 
-            const totalValue = filteredBalances.reduce((acc, curr) => acc + (curr.value || 0), 0)
+            const totalValue = finalBalances.reduce((acc, curr) => acc + (curr.value || 0), 0)
 
             return {
-                balances: filteredBalances,
+                balances: finalBalances,
                 totalValue
             }
         },
-        enabled: !!address && address.startsWith('0x') && address.length === 42,
+        enabled: validAddresses.length > 0,
         refetchInterval: 60000
     })
 

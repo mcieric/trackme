@@ -113,21 +113,17 @@ export const SYMBOL_MAP: Record<string, string> = {
     'DOGE': 'dogecoin',
     'WIF': 'dogwifhat',
     'BONK': 'bonk',
-    // Linea
     'EZETH': 'renzo-restaked-eth',
     'STONE': 'stakestone-ether',
     'WRSETH': 'rs-eth',
-    'LINEA': 'linea', // Linea Ecosystem Token
+    'LINEA': 'linea',
     'TA': 'trusta-ai',
-    'WSTETH': 'wrapped-staked-eth', // Default
+    'WSTETH': 'wrapped-staked-eth',
     'ZERO': 'zerolend',
-    // Celo
     'CELO': 'celo',
     'CUSD': 'celo-dollar',
     'CEUR': 'celo-euro',
-    // Zora
     'ENJOY': 'enjoy',
-    // Base
     'TOSHI': 'toshi',
     'PRIME': 'echelon-prime',
     'VIRTUAL': 'virtual-protocol',
@@ -139,26 +135,37 @@ export const SYMBOL_MAP: Record<string, string> = {
     'TALENT': 'talent-protocol',
     'CBBTC': 'coinbase-wrapped-btc',
     'MASA': 'masa',
-    // Celo
     'USDGLO': 'glo-dollar',
     'G$': 'gooddollar',
     'UBE': 'ubeswap',
-    // Contract Addresses
+    // Contract Addresses for robustness
     '0x9560e827af36c94d2ac33a39bce1fe78631088db': 'velodrome-finance',
-    '0xb5bedd42000b71fdde22d3ee8a79bd49a568fc8f': 'linea-bridged-wsteth' // wstETH on Linea
+    '0xb5bedd42000b71fdde22d3ee8a79bd49a568fc8f': 'linea-bridged-wsteth',
+    '0x940181a94a35a4569e4529a3cdfb74e38fd98631': 'aerodrome-finance',
+    '0x4200000000000000000000000000000000000042': 'optimism',
+    '0x0b2c639c43a23f2514f79435a28821c062ce01d8': 'usd-coin', // USDC on OP
+    '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913': 'usd-coin', // USDC on Base
+    '0xaf88d065e77c8cc2239327c5edb3a432268e5831': 'usd-coin', // USDC on Arb
+    '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': 'usd-coin', // USDC on Polygon
+    '0x066ba6f91753c15320984852033bc883ce75d56d': 'trusta-ai'
 }
 
-export async function fetchTokenPrices() {
+export const SCAM_TOKENS = new Set([
+    'ABTC',
+    'REKT',
+    'THOR', // There are many fake THOR tokens
+    'CREATE',
+    'MUMMY',
+])
+
+export async function fetchTokenPrices(customIds?: string[]) {
     try {
-        // Determine base URL dynamically or relative
-        // Since this runs on client (in hook), relative path works
-        const ids = COINGECKO_IDS.join(',')
+        const ids = customIds && customIds.length > 0 ? customIds.join(',') : COINGECKO_IDS.join(',')
         const response = await fetch(`/api/prices?ids=${ids}`)
 
         if (!response.ok) throw new Error('Failed to fetch prices')
 
         const data = await response.json()
-
         return data
     } catch (error) {
         console.error('Error fetching prices:', error)

@@ -1,4 +1,5 @@
 import { Alchemy, Network } from 'alchemy-sdk'
+import { formatUnits } from 'viem'
 
 const API_KEY = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY
 
@@ -31,129 +32,125 @@ export interface TokenBalance {
     logo?: string
 }
 
+// Basic metadata cache to avoid redundant API calls
+const metadataCache: Record<string, any> = {}
+
+async function getCachedMetadata(alchemy: Alchemy, contractAddress: string) {
+    const key = `${alchemy.config.network}-${contractAddress.toLowerCase()}`
+    if (metadataCache[key]) return metadataCache[key]
+
+    try {
+        const metadata = await alchemy.core.getTokenMetadata(contractAddress)
+        metadataCache[key] = metadata
+        return metadata
+    } catch (err) {
+        console.warn(`Failed to fetch metadata for ${contractAddress}`, err)
+        return null
+    }
+}
+
+// Helper for concurrency-limited processing
+async function processInBatches<T, R>(items: T[], batchSize: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+    const results: R[] = []
+    for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize)
+        const batchResults = await Promise.all(batch.map(fn))
+        results.push(...batchResults)
+        // Small delay between batches to be safe
+        if (i + batchSize < items.length) await new Promise(r => setTimeout(r, 100))
+    }
+    return results
+}
+
 export async function fetchChainTokens(chainId: number, address: string): Promise<TokenBalance[]> {
     const config = settings[chainId as keyof typeof settings]
-    if (!config) return [] // Chain not supported by Alchemy or not configured
+    if (!config) return []
 
     const alchemy = new Alchemy(config)
 
     try {
-        // Get non-zero token balances
-        const balances = await alchemy.core.getTokenBalances(address)
-
-        // Remove tokens with 0 balance
-        const nonZero = balances.tokenBalances.filter(token => {
-            // Basic check for zero hex
-            return token.tokenBalance && token.tokenBalance !== '0x0000000000000000000000000000000000000000000000000000000000000000'
+        // Attempt to fetch balances, but catch specifically to allow for fallback
+        const balances = await alchemy.core.getTokenBalances(address).catch(err => {
+            // Silently fail if it's a known server error to avoid console clutter
+            if (chainId === 137) {
+                console.warn(`[Alchemy] Polygon is currently unstable, passing to fallback...`)
+            } else {
+                console.warn(`[Alchemy] getTokenBalances failed for chain ${chainId}`)
+            }
+            return null
         })
 
-        const tokensData: TokenBalance[] = []
-        // Limit to top 500 to capture more assets (user has >300 tokens)
-        const topTokens = nonZero.slice(0, 500)
+        if (!balances || !balances.tokenBalances) {
+            return []
+        }
 
-        // Force check specific tokens that might be missed (e.g. L3 on Optimism)
-        // We fetch these explicitly to ensure they are found even if Alchemy main call misses them
+        const nonZero = balances.tokenBalances.filter(token =>
+            token.tokenBalance && token.tokenBalance !== '0x' + '0'.repeat(64)
+        )
+
+        // Prioritized and Fallback tokens handling
         const PRIORITY_TOKENS: Record<number, string[]> = {
-            10: ['0x46777c76dbbe40fabb2aab99e33ce20058e76c59'], // L3 on Optimism
+            10: ['0x46777c76dbbe40fabb2aab99e33ce20058e76c59'],
             8453: [
-                '0x940181a94a35a4569e4529a3cdfb74e38fd98631', // AERO
-                '0x50f88fe97f72cd3e75b9eb4f747f59bceba80d59', // JESSE
-                '0x9a33406165f562E16C3abD82fd1185482E01b49a', // TALENT
-                '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf', // cbBTC
-                '0x944824290cc12f31ae18ef51216a223ba4063092', // MASA
-                '0x4ed4e862860bed51a9570b96d89af5e1b0efefed', // DEGEN
-                '0x532f27101965dd16442e59d40670faf5ebb142e4'  // BRETT
+                '0x940181a94a35a4569e4529a3cdfb74e38fd98631',
+                '0x50f88fe97f72cd3e75b9eb4f747f59bceba80d59',
+                '0x9a33406165f562E16C3abD82fd1185482E01b49a',
+                '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
+                '0x944824290cc12f31ae18ef51216a223ba4063092',
+                '0x4ed4e862860bed51a9570b96d89af5e1b0efefed',
+                '0x532f27101965dd16442e59d40670faf5ebb142e4'
             ]
         }
 
+        const topTokens = nonZero.slice(0, 100)
         const priorityList = PRIORITY_TOKENS[chainId] || []
 
-        if (priorityList.length > 0) {
-            try {
-                // Fetch priority tokens separately
-                const priorityBalances = await alchemy.core.getTokenBalances(address, priorityList)
-
-                for (const pToken of priorityBalances.tokenBalances) {
-                    // Check if already in topTokens
-                    const exists = topTokens.find(t => t.contractAddress.toLowerCase() === pToken.contractAddress.toLowerCase())
-                    // If not present and has balance
-                    if (!exists && pToken.tokenBalance && pToken.tokenBalance !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
-                        topTokens.push(pToken)
-                    }
+        for (const pAddr of priorityList) {
+            if (!topTokens.find(t => t.contractAddress.toLowerCase() === pAddr.toLowerCase())) {
+                const pBal = await alchemy.core.getTokenBalances(address, [pAddr])
+                if (pBal.tokenBalances[0]?.tokenBalance !== '0x' + '0'.repeat(64)) {
+                    topTokens.push(pBal.tokenBalances[0])
                 }
-            } catch (err) {
-                console.warn(`Failed to fetch priority tokens for chain ${chainId}`, err)
             }
         }
 
-        await Promise.all(topTokens.map(async (token) => {
-            try {
-                let metadata = await alchemy.core.getTokenMetadata(token.contractAddress)
+        // Process in small batches to avoid 429s
+        const tokensData = await processInBatches(topTokens, 5, async (token): Promise<TokenBalance | null> => {
+            const contractAddress = token.contractAddress.toLowerCase()
+            let metadata = await getCachedMetadata(alchemy, contractAddress)
+            if (!metadata) return null
 
-                // Fallback for known broken metadata (e.g. L3 on Optimism)
-                if (token.contractAddress.toLowerCase() === '0x46777c76dbbe40fabb2aab99e33ce20058e76c59') {
-                    if (!metadata.decimals) metadata.decimals = 18
-                    if (!metadata.symbol) metadata.symbol = 'L3'
-                    if (!metadata.name) metadata.name = 'Layer3'
-                }
-
-                // Fallback for AERO on Base
-                if (token.contractAddress.toLowerCase() === '0x940181a94a35a4569e4529a3cdfb74e38fd98631') {
-                    if (!metadata.decimals) metadata.decimals = 18
-                    if (!metadata.symbol) metadata.symbol = 'AERO'
-                    if (!metadata.name) metadata.name = 'Aerodrome'
-                    if (!metadata.logo) metadata.logo = 'https://assets.coingecko.com/coins/images/31518/large/AERO.png'
-                }
-
-                // Fallback for JESSE
-                if (token.contractAddress.toLowerCase() === '0x50f88fe97f72cd3e75b9eb4f747f59bceba80d59') {
-                    if (!metadata.symbol) metadata.symbol = 'JESSE'
-                    if (!metadata.name) metadata.name = 'Jesse'
-                }
-
-                // Fallback for TALENT
-                if (token.contractAddress.toLowerCase() === '0x9a33406165f562e16c3abd82fd1185482e01b49a') {
-                    if (!metadata.symbol) metadata.symbol = 'TALENT'
-                    if (!metadata.name) metadata.name = 'Talent Protocol'
-                }
-
-                // Fallback for cbBTC
-                if (token.contractAddress.toLowerCase() === '0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf') {
-                    if (!metadata.symbol) metadata.symbol = 'cbBTC'
-                    if (!metadata.name) metadata.name = 'Coinbase Wrapped BTC'
-                }
-
-                // Fallback for MASA
-                if (token.contractAddress.toLowerCase() === '0x944824290cc12f31ae18ef51216a223ba4063092') {
-                    if (!metadata.symbol) metadata.symbol = 'MASA'
-                    if (!metadata.name) metadata.name = 'Masa'
-                }
-
-                // Calculate formatted balance
-                let formatted = '0'
-                if (token.tokenBalance && metadata.decimals) {
-                    const balanceBigInt = BigInt(token.tokenBalance)
-                    const divisor = BigInt(10 ** metadata.decimals)
-                    const val = Number(balanceBigInt) / Number(divisor)
-                    formatted = val.toString()
-                }
-
-                tokensData.push({
-                    chainId,
-                    contractAddress: token.contractAddress,
-                    name: metadata.name || 'Unknown',
-                    symbol: metadata.symbol || '???',
-                    decimals: metadata.decimals,
-                    balance: token.tokenBalance || '0',
-                    formatted,
-                    logo: metadata.logo || undefined
-                })
-            } catch (err) {
-                console.warn(`Failed to fetch metadata for ${token.contractAddress}`, err)
+            // Fallbacks for known missing metadata
+            const fallbacks: Record<string, any> = {
+                '0x46777c76dbbe40fabb2aab99e33ce20058e76c59': { symbol: 'L3', name: 'Layer3', decimals: 18 },
+                '0x940181a94a35a4569e4529a3cdfb74e38fd98631': { symbol: 'AERO', name: 'Aerodrome', decimals: 18, logo: 'https://assets.coingecko.com/coins/images/31518/large/AERO.png' },
+                '0x50f88fe97f72cd3e75b9eb4f747f59bceba80d59': { symbol: 'JESSE', name: 'Jesse', decimals: 18 },
+                '0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf': { symbol: 'cbBTC', name: 'Coinbase Wrapped BTC', decimals: 8 }
             }
-        }))
 
-        return tokensData
+            const fb = fallbacks[contractAddress]
+            if (fb) {
+                metadata = { ...metadata, ...fb }
+            }
+
+            let formatted = '0'
+            if (token.tokenBalance && metadata.decimals) {
+                formatted = formatUnits(BigInt(token.tokenBalance), metadata.decimals)
+            }
+
+            return {
+                chainId,
+                contractAddress,
+                name: metadata.name || 'Unknown',
+                symbol: metadata.symbol || '???',
+                decimals: metadata.decimals,
+                balance: token.tokenBalance || '0x0',
+                formatted,
+                logo: metadata.logo || undefined
+            }
+        })
+
+        return (tokensData.filter((t): t is TokenBalance => t !== null)) as TokenBalance[]
 
     } catch (error) {
         console.error(`Alchemy fetch failed for chain ${chainId}`, error)
